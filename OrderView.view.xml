@@ -78,7 +78,10 @@
       <items>
         <ColumnListItem>
           <cells>
-            <RadioButton groupName="orderSelect"/>
+            <RadioButton groupName="orderSelect"
+              enabled="{orderModel>enabled}"
+              selected="{= ${orderModel>orderNo} === ${orderModel>/selectedOrderNo} }"
+              select="onRadioSelect"/>
             <Text text="{orderModel>orderNo}"/>
             <Text text="{orderModel>parentSFC}"/>
             <VBox>

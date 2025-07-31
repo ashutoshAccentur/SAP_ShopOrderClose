@@ -98,7 +98,9 @@ sap.ui.define([
             scheduledStartEnd: formatDate(orderApiObj.scheduledStartDate) + "\n" + formatDate(orderApiObj.scheduledCompletionDate),
             scheduledStartDate: orderApiObj.scheduledStartDate,
             scheduledCompletionDate: orderApiObj.scheduledCompletionDate,
-            priority: orderApiObj.priority || "-"
+            priority: orderApiObj.priority || "-",
+
+            enabled: orderApiObj.executionStatus === "ACTIVE"
         };
     }
     
@@ -119,7 +121,7 @@ sap.ui.define([
                 PluginViewController.prototype.onInit.apply(this, arguments);
             }
             // Initialize an empty model so the UI can bind to it without errors
-            this.getView().setModel(new JSONModel({ orders: [] }), "orderModel");
+            this.getView().setModel(new JSONModel({ orders: [], selectedOrderNo: "" }), "orderModel");
         },
 
         /**
@@ -263,6 +265,7 @@ sap.ui.define([
 
                 // Bind final, enriched list to table model for display
                 this.getView().getModel("orderModel").setProperty("/orders", enhancedOrders);
+                this.getView().getModel("orderModel").setProperty("/selectedOrderNo", "");  // RESET selection here
 
                 // Update item count in table heading
                 if (oItemsHeading && oItemsHeading.setText) {
@@ -277,6 +280,14 @@ sap.ui.define([
                     oItemsHeading.setText("Items (00)");
                 }
             });
+        },
+
+        // === Radio button selection handler ===
+        onRadioSelect: function(oEvent) {
+            // Find the order number of the row where selection happened
+            var oContext = oEvent.getSource().getBindingContext("orderModel");
+            var orderNo = oContext.getProperty("orderNo");
+            this.getView().getModel("orderModel").setProperty("/selectedOrderNo", orderNo);
         },
 
         /**
