@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mvc:View
+  controllerName="bobm.custom.completeorderplugin.orderviewplugin.controller.OrderView"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:layout="sap.ui.layout"
+  displayBlock="true">
+
+  <VBox class="mainContainer">
+    <Title text="Order Management" level="H2" class="pageTitle"/>
+
+    <!-- Filter Section -->
+    <HBox class="filters-card">
+      <VBox class="filter-group">
+        <Label text="Material"/>
+        <Input placeholder="Enter Material Code or Name" id="materialInput"/>
+      </VBox>
+      <VBox class="filter-group">
+        <Label text="Execution Status"/>
+        <Select id="executionStatusSelect">
+          <core:Item key="" text="Select Execution Status"/>
+          <core:Item key="NOT_IN_EXECUTION" text="Not In Execution"/>
+          <core:Item key="ACTIVE" text="Active"/>
+          <core:Item key="HOLD" text="Hold"/>
+          <core:Item key="COMPLETED" text="Completed"/>
+          <core:Item key="CLOSED" text="Closed"/>
+          <core:Item key="DISCARDED" text="Discarded"/>
+        </Select>
+      </VBox>
+      <VBox class="filter-group">
+        <Label text="Order Number"/>
+        <Input placeholder="Enter Order Number" id="orderNoInput"/>
+      </VBox>
+      <VBox class="filter-group">
+        <Label text="Date From"/>
+        <DatePicker placeholder="mm-dd-yyyy" id="dateFromInput"/>
+      </VBox>
+      <VBox class="filter-group">
+        <Label text="Date To"/>
+        <DatePicker placeholder="mm-dd-yyyy" id="dateToInput"/>
+      </VBox>
+      <Button text="Search" class="primary-btn custom-btn" type="Default" press="onFilterPress"/>
+    </HBox>
+
+    <!-- Quantity Section -->
+    <HBox class="quantity-card">
+      <HBox class="quantity-row">
+        <Label text="Quantity"/>
+        <Input type="Number" placeholder="Enter Quantity" id="qtyInput"/>
+        <HBox class="btn-row">
+          <Button text="Adjust Qty" class="danger-btn custom-btn" type="Default" press="onAdjustQty"/>
+          <Button text="Complete Order" class="success-btn custom-btn" type="Default" press="onCompleteOrder"/>
+          <Button text="Discard Order" class="discard-btn custom-btn" type="Default" press="onDiscardOrder"/>
+        </HBox>
+      </HBox>
+    </HBox>
+
+    <!-- Table Section -->
+    <VBox class="orders-card">
+  <Title text="Items (00)" id="itemsHeading"/>
+  
+  <ScrollContainer horizontal="true" vertical="false" height="auto" width="100%">
+    <Table id="ordersTable" items="{orderModel>/orders}">
+      <columns>
+        <Column width="2em"/>
+        <Column width="8em"><Text text="Order No"/></Column>
+        <Column width="8em"><Text text="Parent SFC"/></Column>
+        <Column width="12em"><Text text="Material &amp; Description"/></Column>
+        <Column width="8em"><Text text="Execution Status"/></Column>
+        <Column width="8em"><Text text="Build Qty"/></Column>
+        <Column width="8em"><Text text="Delivered Qty"/></Column>
+        <Column width="8em"><Text text="DM Released Qty"/></Column>
+        <Column width="8em"><Text text="Available Qty"/></Column>
+        <Column width="12em"><Text text="Scheduled Start/End"/></Column>
+        <Column width="6em"><Text text="Priority"/></Column>
+      </columns>
+      <items>
+        <ColumnListItem>
+          <cells>
+            <RadioButton groupName="orderSelect"/>
+            <Text text="{orderModel>orderNo}"/>
+            <Text text="{orderModel>parentSFC}"/>
+            <VBox>
+              <Text text="{orderModel>materialLine}" textAlign="Center"/>
+              <Text text="{orderModel>materialDesc}" textAlign="Center" class="mat-desc" visible="{= !!${orderModel>materialDesc}}"/>
+            </VBox>
+            <Text text="{orderModel>executionStatus}"/>
+            <Text text="{orderModel>buildQty}"/>
+            <Text text="{orderModel>doneQty}"/>
+            <Text text="{orderModel>dmReleasedQty}"/>
+            <Text text="{orderModel>availableQty}"/>
+            <Text text="{orderModel>scheduledStartEnd}" wrapping="true" renderWhitespace="true"/>
+            <Text text="{orderModel>priority}"/>
+          </cells>
+        </ColumnListItem>
+      </items>
+    </Table>
+  </ScrollContainer>
+
+</VBox>
+  </VBox>
+</mvc:View>

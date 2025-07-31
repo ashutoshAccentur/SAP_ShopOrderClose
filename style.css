@@ -1,0 +1,224 @@
+body {
+  background: #f6f7fb !important;
+  font-family: 'Segoe UI', Arial, sans-serif !important;
+}
+
+.mainContainer {
+  max-width: 1400px;
+  margin: 20px auto;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(80, 107, 209, 0.12);
+  padding: 28px 32px;
+  background-color: #f6f7fb;
+}
+
+.pageTitle {
+  margin-top: 0 !important;
+  color: #274690 !important;
+  letter-spacing: 1px !important;
+  font-size: 2.3rem !important;
+  font-weight: 700 !important;
+}
+
+/* Card/Section Styles */
+.filters-card, .quantity-card, .orders-card {
+  background: #f6f8fc !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(80, 107, 209, 0.08) !important;
+  margin-bottom: 1.5rem !important;
+  padding: 28px 28px 24px 28px !important;
+}
+
+.filters-card {
+  display: flex !important;
+  gap: 22px !important;
+  flex-wrap: wrap !important;
+  align-items: flex-end !important;
+  margin-bottom: 28px !important;
+}
+
+.filter-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  min-width: 200px !important;
+}
+
+.filter-group label,
+.filter-group .sapMLabel,
+.quantity-row label,
+.quantity-row .sapMLabel {
+  font-size: 16px !important;
+  color: #223464 !important;
+  font-weight: 600 !important;
+  margin-bottom: 3px !important;
+}
+.quantity-row label,
+.quantity-row .sapMLabel {
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  margin-right: 6px !important;
+}
+
+.sapMInputBaseInner,
+.sapMComboBoxInputInner {
+  padding: 10px 12px !important;
+  font-size: 16px !important;
+  border: 1px solid #c3d0ec !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  transition: border-color .2s !important;
+}
+.sapMInputBaseInner:focus, .sapMComboBoxInputInner:focus {
+  border-color: #516eff !important;
+}
+
+.quantity-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  width: 100% !important;
+}
+.btn-row {
+  display: flex !important;
+  gap: 15px !important;
+  margin-left: 28px !important;
+}
+
+/* Button Customization */
+.custom-btn .sapMBtnInner {
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+  min-width: 140px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  margin: 0 8px 0 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.custom-btn .sapMBtnContent {
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  width: 100%;
+  text-align: center;
+  color: #fff !important;
+  letter-spacing: .02rem;
+  display: block;
+  line-height: 44px !important;
+}
+.primary-btn .sapMBtnInner { background: #274690 !important; }
+.primary-btn:hover .sapMBtnInner, .primary-btn:focus .sapMBtnInner { background: #516eff !important; }
+.danger-btn .sapMBtnInner { background: #ff5757 !important; }
+.danger-btn:hover .sapMBtnInner, .danger-btn:focus .sapMBtnInner { background: #e83636 !important; }
+.success-btn .sapMBtnInner { background: #3fc267 !important; }
+.success-btn:hover .sapMBtnInner, .success-btn:focus .sapMBtnInner { background: #24934c !important; }
+.discard-btn .sapMBtnInner { background: #ffb84d !important; color: #453509 !important;}
+.discard-btn:hover .sapMBtnInner, .discard-btn:focus .sapMBtnInner { background: #f1a335 !important; color: #453509 !important;}
+.primary-btn .sapMBtnInner:after,
+.danger-btn .sapMBtnInner:after,
+.success-btn .sapMBtnInner:after,
+.discard-btn .sapMBtnInner:after { display: none !important; }
+
+/* Items (00) Title */
+.orders-card .sapMTitle {
+  font-size: 2rem !important;
+  margin-bottom: 16px !important;
+  color: #24375c !important;
+  font-weight: 700 !important;
+  letter-spacing: .01em;
+}
+
+/* TABLE HEADER FLAT SINGLE-ROW STYLE */
+.sapMTable,
+.sapMListTbl {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 18px rgba(80, 107, 209, .08) !important;
+  background: #fff !important;
+  border: none !important;
+}
+
+.sapMListTblHeader,
+.sapMListTblHeader > tr {
+  background: #e4eaf3 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.sapMListTblHeader > tr > th,
+.sapMColumnHeader,
+.sapMColumnHeader .sapMText,
+.sapMColumnHeader .sapMLabel {
+  background: #e4eaf3 !important;   /* Ensure no cell is blocky, but all have the same flat background */
+  box-shadow: none !important;
+  border: none !important;
+  font-weight: 700 !important;
+  color: #233664 !important;
+  font-size: 16px !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 16px 0 !important;
+}
+
+/* Remove individual cell appearance, force header to look flat */
+.sapMTableHeaderRow,
+.sapMTableHeaderRow .sapMListTblCell,
+.sapMTableTH {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-align: center !important;
+}
+.sapMTableTH {
+  border-bottom: none !important;
+}
+
+/* Remove gap between columns in header */
+.sapMListTblHeader > tr > th {
+  border-right: none !important;
+  margin: 0 !important;
+}
+
+/* Table cell styles */
+.sapMListTblCell, .sapMListTblCell .sapMText {
+  font-size: 1rem !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 14px 10px !important;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .mainContainer {
+    padding: 16px 6px !important;
+  }
+
+  /* --- */
+  .filters-card {
+    gap: 10px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .quantity-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+  .sapMTable {
+    font-size: 13px !important;
+  }
+
+  .mat-desc {
+    color: #3763eb !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    margin-top: 2px !important;
+    text-align: center !important;
+    text-decoration: none !important;
+  }  
+  
+}
