@@ -146,13 +146,27 @@ sap.ui.define([
             const dateFromObj = parseDatePickerValue(oDateFrom);
             const dateToObj = parseDatePickerValue(oDateTo);
 
-            // === Validation section ===
+            const hasMaterial = !!material;
+            const hasExecStatus = !!executionStatus;
+            const hasOrder = !!orderNumber;
+            const hasDateFrom = !!dateFromObj;
+            const hasDateTo = !!dateToObj;
 
-            // Material is mandatory (per business logic)
-            if (!material) {
-                MessageToast.show("Material is mandatory.");
+            // === Validation section ===
+            // --- YOUR NEW VALIDATION STARTS HERE ---
+            if ((hasDateFrom && !hasDateTo) || (!hasDateFrom && hasDateTo)) {
+                MessageToast.show("Please provide both 'Date From' and 'Date To' to search by date range.");
                 return;
             }
+            if (!hasMaterial && !hasExecStatus && !hasOrder && !(hasDateFrom && hasDateTo)) {
+                MessageToast.show("Please provide at least one search parameter.");
+                return;
+            }
+            // Material is mandatory (per business logic)
+            // if (!material) {
+            //     MessageToast.show("Material is mandatory.");
+            //     return;
+            // }
             // From date cannot be after To date
             if (dateFromObj && dateToObj && dateFromObj > dateToObj) {
                 MessageToast.show("Date From cannot be later than Date To.");
