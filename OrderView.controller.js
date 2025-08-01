@@ -186,11 +186,19 @@ sap.ui.define([
             const sListUrl = this.getPublicApiRestDataSourceUri() + "/order/v1/orders/list";
 
             // Query parameters for API call
-            const params = { plant: oPlant, material: material, size: 200, page: 0 };
+
+            const params = { size: 200, page: 0 };
+
+            // Always set plant
+            params.plant = oPlant;
+            
+            // Only add if value is present (not empty string/null)
+            if (material) params.material = material;
             if (executionStatus) params.executionStatus = executionStatus;
             if (orderNumber) params.orderNumber = orderNumber;
             if (dateFromStr) params.dateFrom = dateFromStr;
             if (dateToStr) params.dateTo = dateToStr;
+                        
 
             // === Actual backend fetch ===
 
