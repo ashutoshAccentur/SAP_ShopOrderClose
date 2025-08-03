@@ -6,10 +6,6 @@ sap.ui.define([
 ], function (JSONModel, PluginViewController, Log, MessageToast) {
     "use strict";
 
-    // =======================
-    // === Helper Functions ===
-    // =======================
-
     /**
      * Extract the UOM (Unit of Measure) for an order from the backend object.
      * Tries in order: production UOM, ERP UOM, base UOM. Returns "" if not found.
@@ -105,9 +101,7 @@ sap.ui.define([
     }
     
 
-    // ===========================================================
     // === Controller definition for Order View (main class) ===
-    // ===========================================================
 
     return PluginViewController.extend("bobm.custom.completeorderplugin.orderviewplugin.controller.OrderView", {
         metadata: { properties: {} },
@@ -137,7 +131,7 @@ sap.ui.define([
             const oOrderNo = this.byId("orderNoInput");
             const oDateFrom = this.byId("dateFromInput");
             const oDateTo = this.byId("dateToInput");
-            const oItemsHeading = this.byId("itemsHeading"); // For item count display
+            const oItemsHeading = this.byId("itemsHeading"); // item count display
         
             // Extract/normalize values
             const material = oMaterial ? oMaterial.getValue().trim() : "";
