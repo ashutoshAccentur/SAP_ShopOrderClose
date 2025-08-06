@@ -214,16 +214,16 @@ sap.ui.define([
 
                 // === Client-side post-filtering (for extra safety) ===
 
-                // Filter by date range if both are provided (redundant if backend already filters)
+                // Filter by date range if both are provided (scheduledStartDate MUST be within the range, inclusive)
                 if (dateFromObj && dateToObj) {
                     ordersList = ordersList.filter(item => {
-                        if (!item.scheduledStartDate || !item.scheduledCompletionDate) return false;
+                        if (!item.scheduledStartDate) return false;
                         const itemStart = new Date(item.scheduledStartDate);
-                        const itemEnd = new Date(item.scheduledCompletionDate);
-                        // Only include orders fully within range
-                        return (itemStart >= dateFromObj && itemEnd <= dateToObj);
+                        // Only include if scheduledStartDate falls within [dateFromObj, dateToObj] (inclusive)
+                        return (itemStart >= dateFromObj && itemStart <= dateToObj);
                     });
                 }
+
 
                 // Filter by execution status, if specified (extra check, as backend should already filter)
                 if (executionStatus) {
@@ -246,7 +246,7 @@ sap.ui.define([
                     let parentSFC = "-";
                     let dmReleasedQty = "-";  // Default
                 
-                    if (orderObj.executionStatus === "ACTIVE") {
+                    if (orderObj.executionStatus === "ACTIVE" || orderObj.executionStatus === "NOT_IN_EXECUTION") {
                         const orderDetailUrl = `${this.getPublicApiRestDataSourceUri()}/order/v1/orders?plant=${encodeURIComponent(oPlant)}&order=${encodeURIComponent(orderObj.order)}`;
                         try {
                             const orderDetailResponse = await fetch(orderDetailUrl);
@@ -356,75 +356,82 @@ sap.ui.define([
                 return;
             }
         
-            // Step 1: Fetch SFC List via GET
-            const sfcListUrl = `${baseApiUrl}/sfc/v1/worklist/sfcs?plant=${encodeURIComponent(plant)}&filter.order=${encodeURIComponent(selectedOrderNo)}`;
+            // Fetch Parent SFC value for selected order from model
+            const orders = orderModel.getProperty("/orders") || [];
+            const selectedOrderObj = orders.find(o => o.orderNo === selectedOrderNo);
+            const parentSFC = selectedOrderObj && selectedOrderObj.parentSFC && selectedOrderObj.parentSFC !== "-" ? selectedOrderObj.parentSFC : null;
+
+            if (!parentSFC) {
+                MessageToast.show("No Parent SFC found. One or more SFC are in open status.");
+                return;
+            }            
+        
             try {
-                const sfcListResponse = await fetch(sfcListUrl, {
-                    credentials: "include"
+                // 1. Get SFC detail to check Parent SFC status
+                const sfcDetailUrl = `${baseApiUrl}/sfc/v1/sfcdetail?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
+                const sfcDetailResponse = await fetch(sfcDetailUrl, { credentials: "include" });
+        
+                if (!sfcDetailResponse.ok) {
+                    MessageToast.show("Error fetching Parent SFC detail.");
+                    return;
+                }
+        
+                const sfcDetail = await sfcDetailResponse.json();
+                const sfcStatusDesc = sfcDetail.status && sfcDetail.status.description;
+
+                // 2. If Parent SFC status is NOT "NEW", show status and exit
+                if (String(sfcStatusDesc).toUpperCase() !== "NEW") {
+                    MessageToast.show("One or more SFC are in open status.");
+                    return;
+                }                
+        
+                // 3. Invalidate Parent SFC (status is "NEW")
+                const invalidateUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
+                await new Promise((resolve) => {
+                    this.ajaxPatchRequest(
+                        invalidateUrl,
+                        {}, // No payload
+                        (response) => { resolve(); },
+                        (error) => {
+                            MessageToast.show("Failed to invalidate Parent SFC: " + (error.error?.message || error));
+                            resolve();
+                        }
+                    );
                 });
         
-                if (sfcListResponse.status === 204) {
-                    MessageToast.show("No SFC is Released for this order.");
-                    return;
-                }
-                if (!sfcListResponse.ok) {
-                    const errorMsg = await sfcListResponse.text();
-                    MessageToast.show("Error fetching SFC list: " + errorMsg);
-                    return;
-                }
-                const sfcList = await sfcListResponse.json();
-                if (!Array.isArray(sfcList) || sfcList.length === 0) {
-                    MessageToast.show("No SFC is Released for this order.");
-                    return;
-                }
-        
-                // Step 2: Filter SFCs with needed statuses
-                const validStatuses = ["IN_QUEUE", "NEW", "HOLD"];
-                const sfcsToInvalidate = sfcList.filter(sfc =>
-                    sfc.order === selectedOrderNo &&
-                    sfc.status &&
-                    validStatuses.includes(String(sfc.status.description).toUpperCase())
-                ).map(sfc => sfc.sfc);
-        
-                if (sfcsToInvalidate.length === 0) {
-                    MessageToast.show("No SFCs found in status IN_QUEUE, NEW, or HOLD. Order already completed.");
-                    return;
-                }
-        
-                // Step 3: Invalidate each SFC using PATCH via ajaxPatchRequest
-                let anyError = false;
-                for (const sfcNumber of sfcsToInvalidate) {
-                    const patchUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(sfcNumber)}`;
-                    // No payload required for this PATCH, pass empty object as parameter
-                    await new Promise((resolve) => {
-                        this.ajaxPatchRequest(
-                            patchUrl,
-                            {}, // NO body/payload!
-                            (response) => {
-                                // success callback
-                                console.log(`SFC ${sfcNumber} invalidated:`, response);
-                                resolve();
-                            },
-                            (error) => {
-                                // error callback
-                                MessageToast.show(`Failed to invalidate SFC ${sfcNumber}:\n${error.error?.message || error}`);
-                                console.error("Invalidate error", error);
-                                anyError = true;
-                                resolve();
+                // 4. Complete Order
+                const completeOrderUrl = `${baseApiUrl}/order/v1/orders/complete?order=${encodeURIComponent(selectedOrderNo)}&plant=${encodeURIComponent(plant)}`;
+                await new Promise((resolve) => {
+                    this.ajaxPostRequest(
+                        completeOrderUrl,
+                        {}, // No payload needed
+                        (response) => {
+                            // Show the response message from the API
+                            if (response && response.message) {
+                                MessageToast.show(response.message);
+                            } else {
+                                MessageToast.show("Order completion request processed.");
                             }
-                        );
-                    });
-                }
-
+                            this.onFilterPress(); // Refresh table
+                            resolve();
+                        },
+                        (error) => {
+                            // Show the response message from the API
+                            if (error && error.error && error.error.message) {
+                                MessageToast.show(error.error.message);
+                            } else {
+                                MessageToast.show("Failed to complete order.");
+                            }
+                            this.onFilterPress(); // Optionally refresh table on error too
+                            resolve();
+                        }
+                    );
+                });
         
-                if (!anyError) {
-                    MessageToast.show("SFCs Deleted & Order Completed.");
-                    this.onFilterPress(); // Refresh table
-                }
             } catch (error) {
                 MessageToast.show("Unexpected error: " + error.message);
             }
-        },                
+        },                        
 
 
 
