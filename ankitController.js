@@ -1,15 +1,15 @@
-// Main controller for the Complete Order plugin in SAP DM
 sap.ui.define([
-    // SAPUI5 modules and dependencies required for this plugin
     "sap/ui/model/json/JSONModel",
     "sap/dm/dme/podfoundation/controller/PluginViewController",
     "sap/base/Log",
-    "sap/m/MessageToast"
-], function (JSONModel, PluginViewController, Log, MessageToast) {
+    "sap/m/MessageToast",
+    "sap/m/MessageBox",
+], function (JSONModel, PluginViewController, Log, MessageToast,MessageBox) {
     "use strict";
-
+ 
+    var oOrderNumber, oParentSFCNumber,obuildQty, oDeliveredQty;
+ 
     /**
-     * ashutosh.d.kashyap
      * Extract the UOM (Unit of Measure) for an order from the backend object.
      * Tries in order: production UOM, ERP UOM, base UOM. Returns "" if not found.
      * @param {object} orderApiObj - The raw order object from API.
@@ -28,10 +28,9 @@ sap.ui.define([
         }
         return "";
     }
-
+ 
     /**
-     * ashutosh.d.kashyap
-     * Formats an ISO date string to "MM/DD/YYYY, hh:mm:ss am/pm" (Indian locale).
+     * Formats an ISO date string to "DD/MM/YYYY, hh:mm:ss am/pm" (Indian locale).
      * Returns "-" if input is invalid.
      * @param {string} dateStr - ISO date string.
      * @returns {string}
@@ -55,10 +54,9 @@ sap.ui.define([
             return "-";
         }
     }
-    
-
+   
+ 
     /**
-     * ashutosh.d.kashyap
      * Parse and validate a SAPUI5 DatePicker value to a Date object.
      * Returns null if the value is empty or not a valid date.
      * @param {sap.m.DatePicker} oDatePicker - The DatePicker instance.
@@ -72,9 +70,8 @@ sap.ui.define([
         const dt = new Date(value);
         return isNaN(dt.getTime()) ? null : dt;
     }
-
+ 
     /**
-     * ashutosh.d.kashyap
      * Maps a raw API order object to a UI table row object for model binding.
      * Handles missing fields, formatting, and aggregates UI-friendly values.
      * @param {object} orderApiObj - Raw order object from API.
@@ -94,49 +91,41 @@ sap.ui.define([
             doneQty: orderApiObj.doneQuantity !== undefined ? orderApiObj.doneQuantity + " " + uom : "-",
             dmReleasedQty: "-", // Default, will be filled later asynchronously if needed
             availableQty:
-                (orderApiObj.buildQuantity !== undefined && orderApiObj.releasedQuantity !== undefined)
-                    ? (orderApiObj.buildQuantity - orderApiObj.releasedQuantity) + " " + uom
+                (orderApiObj.buildQuantity !== undefined && orderApiObj.doneQuantity !== undefined)
+                    ? (orderApiObj.buildQuantity - orderApiObj.doneQuantity) + " " + uom
                     : "-",
             scheduledStartEnd: formatDate(orderApiObj.scheduledStartDate) + "\n" + formatDate(orderApiObj.scheduledCompletionDate),
             scheduledStartDate: orderApiObj.scheduledStartDate,
             scheduledCompletionDate: orderApiObj.scheduledCompletionDate,
             priority: orderApiObj.priority || "-",
-
+ 
             enabled: ["ACTIVE", "NOT_IN_EXECUTION"].includes(orderApiObj.executionStatus)
         };
     }
-    
-
+   
+ 
     // === Controller definition for Order View (main class) ===
-
+ 
     return PluginViewController.extend("bobm.custom.completeorderplugin.orderviewplugin.controller.OrderView", {
         metadata: { properties: {} },
-
+ 
         /**
-         * ashutosh.d.kashyap
-         * Controller initialization. 
-         * Sets up the default JSON model for orders table and selection tracking.
+         * Controller initialization. Sets up empty order model for UI table.
          */
         onInit: function () {
             // Call super (base class) init if present (important for plugin lifecycle)
             if (PluginViewController.prototype.onInit) {
                 PluginViewController.prototype.onInit.apply(this, arguments);
             }
-            // Initialize selectedExecutionStatus for tracking selected order status
-            this.getView().setModel(new JSONModel({
-                orders: [],
-                selectedOrderNo: "",
-                selectedExecutionStatus: ""
-            }), "orderModel");
+            // Initialize an empty model so the UI can bind to it without errors
+            this.getView().setModel(new JSONModel({ orders: [], selectedOrderNo: "" }), "orderModel");
         },
-
+ 
         /**
-         * ashutosh.d.kashyap
          * Handler for "Filter" button press.
          * Reads all input fields, validates mandatory fields,
          * builds API request, fetches and processes results, and binds to table.
          * Shows MessageToast for any input errors or backend failures.
-         * Updates the table model for display
          */
         onFilterPress: function () {
             // Gather input controls by their IDs
@@ -146,20 +135,20 @@ sap.ui.define([
             const oDateFrom = this.byId("dateFromInput");
             const oDateTo = this.byId("dateToInput");
             const oItemsHeading = this.byId("itemsHeading"); // item count display
-        
+       
             // Extract/normalize values
             const material = oMaterial ? oMaterial.getValue().trim() : "";
             const executionStatus = oExecutionStatus ? oExecutionStatus.getSelectedKey() : "";
             const orderNumber = oOrderNo ? oOrderNo.getValue().trim() : "";
             const dateFromObj = parseDatePickerValue(oDateFrom);
             const dateToObj = parseDatePickerValue(oDateTo);
-
+ 
             const hasMaterial = !!material;
             const hasExecStatus = !!executionStatus;
             const hasOrder = !!orderNumber;
             const hasDateFrom = !!dateFromObj;
             const hasDateTo = !!dateToObj;
-
+ 
             // === Validation section ===
             if ((hasDateFrom && !hasDateTo) || (!hasDateFrom && hasDateTo)) {
                 MessageToast.show("Please provide both 'Date From' and 'Date To' to search by date range.");
@@ -174,36 +163,36 @@ sap.ui.define([
                 MessageToast.show("Date From cannot be later than Date To.");
                 return;
             }
-
+ 
             // === Preparing API parameters ===
-
+ 
             // Convert dates to API-friendly format (YYYY-MM-DD)
             const dateFromStr = dateFromObj ? dateFromObj.toISOString().substring(0, 10) : null;
             const dateToStr = dateToObj ? dateToObj.toISOString().substring(0, 10) : null;
-
+ 
             // Fetch plant from pod controller, which may depend on logged-in user/session
             const oPlant = this.getPodController().getUserPlant();
-
+ 
             // Backend API endpoint for order list
             const sListUrl = this.getPublicApiRestDataSourceUri() + "/order/v1/orders/list"; // Order List api
-
+ 
             // Query parameters for API call
-
+ 
             const params = { size: 200, page: 0 };
-
+ 
             // Always set plant
             params.plant = oPlant;
-            
+           
             // Only add if value is present (not empty string/null)
             if (material) params.material = material;
             if (executionStatus) params.executionStatus = executionStatus;
             if (orderNumber) params.orderNumber = orderNumber;
             if (dateFromStr) params.dateFrom = dateFromStr;
             if (dateToStr) params.dateTo = dateToStr;
-                        
-
+                       
+ 
             // === Actual backend fetch ===
-
+ 
             fetch(sListUrl + "?" + new URLSearchParams(params).toString())
             .then(response => {
                 if (!response.ok) throw new Error("Server/API error");
@@ -211,9 +200,9 @@ sap.ui.define([
             })
             .then(async apiData => {
                 let ordersList = apiData.content || [];
-
+ 
                 // === Client-side post-filtering (for extra safety) ===
-
+ 
                 // Filter by date range if both are provided (redundant if backend already filters)
                 if (dateFromObj && dateToObj) {
                     ordersList = ordersList.filter(item => {
@@ -224,29 +213,29 @@ sap.ui.define([
                         return (itemStart >= dateFromObj && itemEnd <= dateToObj);
                     });
                 }
-
+ 
                 // Filter by execution status, if specified (extra check, as backend should already filter)
                 if (executionStatus) {
                     ordersList = ordersList.filter(item =>
                         item.executionStatus && item.executionStatus === executionStatus
                     );
                 }
-
+ 
                 // Client-side filter for order number (in case backend search is partial or exact)
                 if (orderNumber) {
                     ordersList = ordersList.filter(item =>
                         item.order && item.order.includes(orderNumber)
                     );
                 }
-
+ 
                 // === Enrich orders with Parent SFC (asynchronously for each row) ===
-
+ 
                 // For each order, if ACTIVE, call detail API to get SFCs and pick Parent SFC
                 const enhancedOrders = await Promise.all(ordersList.map(async (orderObj) => {
                     let parentSFC = "-";
                     let dmReleasedQty = "-";  // Default
-                
-                    if (orderObj.executionStatus === "ACTIVE") {
+               
+                    if ((orderObj.executionStatus === "ACTIVE" ) || (orderObj.executionStatus === "NOT_IN_EXECUTION")) {
                         const orderDetailUrl = `${this.getPublicApiRestDataSourceUri()}/order/v1/orders?plant=${encodeURIComponent(oPlant)}&order=${encodeURIComponent(orderObj.order)}`;
                         try {
                             const orderDetailResponse = await fetch(orderDetailUrl);
@@ -260,7 +249,7 @@ sap.ui.define([
                                 }
                                 if (foundSFC) {
                                     parentSFC = foundSFC;
-                
+               
                                     // Fetch DM Released Qty from SFC Detail API
                                     const sfcDetailUrl = `${this.getPublicApiRestDataSourceUri()}/sfc/v1/sfcdetail?plant=${encodeURIComponent(oPlant)}&sfc=${encodeURIComponent(foundSFC)}`; //SFC detail api
                                     try {
@@ -295,17 +284,17 @@ sap.ui.define([
                     }
                     const mappedOrder = mapOrderApiToUiRow(orderObj);
                     mappedOrder.parentSFC = parentSFC;
-                    const uom = getOrderUOM(orderObj);
-                    // Only add unit if value is a number/string (not "-")
-                    mappedOrder.dmReleasedQty = (dmReleasedQty !== "-") ? `${dmReleasedQty} ${uom}` : "-";
+                    mappedOrder.dmReleasedQty = dmReleasedQty;
                     return mappedOrder;
                 }));
-
-
+               
+               
+                         
+ 
                 // Bind final, enriched list to table model for display
                 this.getView().getModel("orderModel").setProperty("/orders", enhancedOrders);
                 this.getView().getModel("orderModel").setProperty("/selectedOrderNo", "");  // RESET selection here
-
+ 
                 // Update item count in table heading
                 if (oItemsHeading && oItemsHeading.setText) {
                     oItemsHeading.setText(`Items (${enhancedOrders.length.toString().padStart(2, "0")})`);
@@ -320,148 +309,6 @@ sap.ui.define([
                 }
             });
         },
-
-
-        
-
-        /**
-         * ashutosh.d.kashyap
-         * Handles the Complete Order button click.
-         * Checks order selection and status
-         * Acts on two types of Order ("Active" & "Not-In-Execution")
-         * For Active one, throws message to Go and complete the open SFCs
-         * For NOT_IN_EXECUTION: fetches SFCs in (NEW, IN_QUEUE, or HOLD status)
-         * Invalidates these SFCs using PATCH, this will delete and Complete that Order.
-         * Shows MessageToast for any input errors or backend failures.
-         */
-        onCompleteOrder: async function () {
-            const orderModel = this.getView().getModel("orderModel");
-            const selectedOrderNo = orderModel.getProperty("/selectedOrderNo");
-            const executionStatus = orderModel.getProperty("/selectedExecutionStatus");
-            const plant = this.getPodController().getUserPlant();
-            const baseApiUrl = this.getPublicApiRestDataSourceUri();
-        
-            if (!selectedOrderNo) {
-                MessageToast.show("Please select an order first.");
-                return;
-            }
-        
-            if (executionStatus === "ACTIVE") {
-                MessageToast.show("There are open SFCs, Kindly Complete it.");
-                return;
-            }
-        
-            if (executionStatus !== "NOT_IN_EXECUTION") {
-                MessageToast.show("Only orders with status ACTIVE or NOT IN EXECUTION can be completed.");
-                return;
-            }
-        
-            // Step 1: Fetch SFC List via GET
-            const sfcListUrl = `${baseApiUrl}/sfc/v1/worklist/sfcs?plant=${encodeURIComponent(plant)}&filter.order=${encodeURIComponent(selectedOrderNo)}`;
-            try {
-                const sfcListResponse = await fetch(sfcListUrl, {
-                    credentials: "include"
-                });
-        
-                if (sfcListResponse.status === 204) {
-                    MessageToast.show("No SFC is Released for this order.");
-                    return;
-                }
-                if (!sfcListResponse.ok) {
-                    const errorMsg = await sfcListResponse.text();
-                    MessageToast.show("Error fetching SFC list: " + errorMsg);
-                    return;
-                }
-                const sfcList = await sfcListResponse.json();
-                if (!Array.isArray(sfcList) || sfcList.length === 0) {
-                    MessageToast.show("No SFC is Released for this order.");
-                    return;
-                }
-        
-                // Step 2: Filter SFCs with needed statuses
-                const validStatuses = ["IN_QUEUE", "NEW", "HOLD"];
-                const sfcsToInvalidate = sfcList.filter(sfc =>
-                    sfc.order === selectedOrderNo &&
-                    sfc.status &&
-                    validStatuses.includes(String(sfc.status.description).toUpperCase())
-                ).map(sfc => sfc.sfc);
-        
-                if (sfcsToInvalidate.length === 0) {
-                    MessageToast.show("No SFCs found in status IN_QUEUE, NEW, or HOLD. Order already completed.");
-                    return;
-                }
-        
-                // Step 3: Invalidate each SFC using PATCH via ajaxPatchRequest
-                let anyError = false;
-                for (const sfcNumber of sfcsToInvalidate) {
-                    const patchUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(sfcNumber)}`;
-                    // No payload required for this PATCH, pass empty object as parameter
-                    await new Promise((resolve) => {
-                        this.ajaxPatchRequest(
-                            patchUrl,
-                            {}, // NO body/payload!
-                            (response) => {
-                                // success callback
-                                console.log(`SFC ${sfcNumber} invalidated:`, response);
-                                resolve();
-                            },
-                            (error) => {
-                                // error callback
-                                MessageToast.show(`Failed to invalidate SFC ${sfcNumber}:\n${error.error?.message || error}`);
-                                console.error("Invalidate error", error);
-                                anyError = true;
-                                resolve();
-                            }
-                        );
-                    });
-                }
-
-        
-                if (!anyError) {
-                    MessageToast.show("SFCs Deleted & Order Completed.");
-                    this.onFilterPress(); // Refresh table
-                }
-            } catch (error) {
-                MessageToast.show("Unexpected error: " + error.message);
-            }
-        },                
-
-
-
-        /**
-         * ashutosh.d.kashyap
-         * Handles radio button select event for table row.
-         * Updates the selected order number and execution status in the model.
-         */          
-        onRadioSelect: function(oEvent) {
-            const oContext = oEvent.getSource().getBindingContext("orderModel");
-            const orderNo = oContext.getProperty("orderNo");
-            const executionStatus = oContext.getProperty("executionStatus");
-        
-            // Save the selected orderNo and executionStatus into your model
-            const orderModel = this.getView().getModel("orderModel");
-            orderModel.setProperty("/selectedOrderNo", orderNo);
-            orderModel.setProperty("/selectedExecutionStatus", executionStatus);
-        },
-
-
-            
-        /**
-         * Helper: Fetch CSRF token for a URL (needed for PATCH/POST/DELETE in SAP REST APIs)
-         * Always uses GET method and 'X-CSRF-Token: Fetch' header.
-         * @param {string} url - The URL to fetch token from (use GET endpoint of your service)
-         * @returns {Promise<string|null>} - The CSRF token, or null if not found
-         */
-        // fetchCsrfToken: async function(url) {
-        //     const res = await fetch(url, {
-        //         method: "GET",
-        //         headers: { "X-CSRF-Token": "Fetch" },
-        //         credentials: "include" // needed for cookies/session in SAP
-        //     });
-        //     return res.headers.get("x-csrf-token");
-        // },
-        
-
         /**
          * Wrapper utility for AJAX GET requests (legacy fallback in this app).
          * Calls provided success/error callbacks.
@@ -484,6 +331,172 @@ sap.ui.define([
                     }
                 }
             );
+        },
+ 
+        // Complete Order Button
+        onCompleteOrder: async function () {
+            const orderModel = this.getView().getModel("orderModel");
+            const selectedOrderNo = orderModel.getProperty("/selectedOrderNo");
+            const executionStatus = orderModel.getProperty("/selectedExecutionStatus");
+            const plant = this.getPodController().getUserPlant();
+            const baseApiUrl = this.getPublicApiRestDataSourceUri();
+       
+            if (!selectedOrderNo) {
+                MessageToast.show("Please select an order first.");
+                return;
+            }
+       
+            if (executionStatus === "ACTIVE") {
+                MessageToast.show("There are Active SFCs, Kindly Complete those SFCs first.");
+                return;
+            }
+       
+            if (executionStatus === "NOT_IN_EXECUTION") {
+                // Use the correct endpoint as per your last message
+                const sfcListUrl = `${baseApiUrl}/sfc/v1/worklist/sfcs?plant=${encodeURIComponent(plant)}&filter.order=${encodeURIComponent(selectedOrderNo)}`;
+       
+                try {
+                    const sfcListResponse = await fetch(sfcListUrl);
+       
+                    // Robustly handle possible empty or invalid response
+                    const responseText = await sfcListResponse.text();
+                    let sfcs = [];
+                    if (responseText.trim() !== "") {
+                        try {
+                            sfcs = JSON.parse(responseText);
+                        } catch (e) {
+                            MessageToast.show("Invalid JSON in SFC List API response.");
+                            return;
+                        }
+                    } // else sfcs remains as []
+       
+                    if (!Array.isArray(sfcs) || sfcs.length === 0) {
+                        MessageToast.show(`No SFCs found for Order ${selectedOrderNo}.`);
+                        return;
+                    }
+       
+                    // Filter SFCs by allowed statuses
+                    const validStatusesForInvalidation = ["IN_QUEUE", "HOLD", "NEW"];
+                    const sfcsToInvalidate = sfcs
+                        .filter(sfc =>
+                            sfc.order === selectedOrderNo &&
+                            sfc.status &&
+                            validStatusesForInvalidation.includes(sfc.status.description)
+                        )
+                        .map(sfc => sfc.sfc);
+       
+                    // Proceed to invalidate each SFC (one by one)
+                    for (const sfcNumber of sfcsToInvalidate) {
+                        const invalidateUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(sfcNumber)}`;
+       
+                        try {
+                            const invalidateResponse = await fetch(invalidateUrl, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" }
+                            });
+       
+                            if (!invalidateResponse.ok) {
+                                const errorMsg = await invalidateResponse.text();
+                                MessageToast.show(`Failed to invalidate SFC ${sfcNumber}: ${errorMsg}`);
+                                // Continue with next SFC
+                            }
+                        } catch (err) {
+                            MessageToast.show(`Error invalidating SFC ${sfcNumber}: ${err.message}`);
+                        }
+                    }
+       
+                    // Success message after all attempts
+                    MessageToast.show("SFC deleted and order completed.");
+                    // Optionally refresh the table
+                    this.onFilterPress();
+       
+                } catch (error) {
+                    MessageToast.show(`Error: ${error.message}`);
+                }
+            } else {
+                MessageToast.show("Only orders with status ACTIVE or NOT IN EXECUTION can be completed.");
+            }
+        },  
+       
+         /*
+            developed by ankit.f.kumar.gupta@accenture.com
+ 
+        */
+ 
+        // =============================== Adjust qty button function code start from here ===================================
+ 
+        onAdjustQty: function() {
+            var oPlant = this.getPodController().getUserPlant();
+            console.log(oPlant);
+            //get the qty need to update
+            const qtyToUpdate = this.byId("qtyInput").getValue();
+            console.log("qtyToUpdate", qtyToUpdate);
+            const sUrl = this.getPublicApiRestDataSourceUri() + "/sfc/v1/sfcs/setQuantity";
+            console.log(sUrl);
+            var oParameters = {
+                "plant": oPlant,
+                "sfcQuantityRequests": [{
+                    "sfc": oParentSFCNumber,
+                    "quantity": qtyToUpdate // this is the new qty on that will set on parent SFC
+                }]
+            };
+ 
+            //validation for qty check
+ 
+            this.ajaxPostRequest(
+                sUrl, oParameters,
+                (response) => {
+                    sap.m.MessageToast.show("New qty set Successfully!");
+                    // console.log("Print Response:", response);
+                },
+                (error) => {
+                    sap.m.MessageToast.show("Error while setting the new qty.\n" + error.error.message);
+                    //  console.error("Print Error:", error);
+                })
+ 
+        },
+ 
+        // =============================== Adjust qty button function code Ends here ===================================
+ 
+ 
+        // =============================== Discard Order button function code start here ===================================
+ 
+        onDiscardOrder: function() {
+            var oPlant = this.getPodController().getUserPlant();
+ 
+            const sUrl = this.getPublicApiRestDataSourceUri() + "/order/v1/orders/discard" + "?plant=" + oPlant + "&order=" + oOrderNumber;
+            console.log(sUrl);
+ 
+            this.ajaxPostRequest(
+                sUrl, {},
+                (response) => {
+                    sap.m.MessageToast.show("Order Discarded Successfully!");
+                    // console.log("Print Response:", response);
+                },
+                (error) => {
+                    sap.m.MessageToast.show("Error while discarding Order.\n" + error);
+                    //  console.error("Print Error:", error);
+                })
+        },
+ 
+        // =============================== Discard Order button function code Ends here ===================================
+ 
+        onRadioSelect: function(oEvent) {
+            var oRadio = oEvent.getSource();
+ 
+            // Get context for the RadioButton, using correct model name
+            var oContext = oRadio.getBindingContext("orderModel");
+ 
+            if (oContext) {
+                var selectedData = oContext.getObject(); // data from this row
+                console.log("Selected Order:", selectedData);
+                oOrderNumber = selectedData.orderNo; //get order number from selected row
+                //obuildQty=selectedData.bui
+                oParentSFCNumber = selectedData.parentSFC; //get parent sfc number from selected row
+                console.log("Order number is ", oOrderNumber, "parent sfc number is ", oParentSFCNumber)
+            } else {
+                console.warn("No binding context found for the selected radio button.");
+            }
         }
     });
 });
