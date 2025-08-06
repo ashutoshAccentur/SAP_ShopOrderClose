@@ -337,7 +337,6 @@ sap.ui.define([
         onCompleteOrder: async function () {
             const orderModel = this.getView().getModel("orderModel");
             const selectedOrderNo = orderModel.getProperty("/selectedOrderNo");
-            const executionStatus = orderModel.getProperty("/selectedExecutionStatus");
             const plant = this.getPodController().getUserPlant();
             const baseApiUrl = this.getPublicApiRestDataSourceUri();
         
@@ -346,67 +345,57 @@ sap.ui.define([
                 return;
             }
         
-            if (executionStatus === "ACTIVE") {
-                MessageToast.show("There are open SFCs, Kindly Complete it.");
-                return;
-            }
-        
-            if (executionStatus !== "NOT_IN_EXECUTION") {
-                MessageToast.show("Only orders with status ACTIVE or NOT IN EXECUTION can be completed.");
-                return;
-            }
-        
             // Fetch Parent SFC value for selected order from model
             const orders = orderModel.getProperty("/orders") || [];
             const selectedOrderObj = orders.find(o => o.orderNo === selectedOrderNo);
             const parentSFC = selectedOrderObj && selectedOrderObj.parentSFC && selectedOrderObj.parentSFC !== "-" ? selectedOrderObj.parentSFC : null;
-
-            if (!parentSFC) {
-                MessageToast.show("No Parent SFC found. One or more SFC are in open status.");
-                return;
-            }            
+        
+            let isParentSfcDeleted = false;
         
             try {
-                // 1. Get SFC detail to check Parent SFC status
-                const sfcDetailUrl = `${baseApiUrl}/sfc/v1/sfcdetail?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
-                const sfcDetailResponse = await fetch(sfcDetailUrl, { credentials: "include" });
+                if (parentSFC) {
+                    // 1. Get SFC detail to check Parent SFC status
+                    const sfcDetailUrl = `${baseApiUrl}/sfc/v1/sfcdetail?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
+                    const sfcDetailResponse = await fetch(sfcDetailUrl, { credentials: "include" });
         
-                if (!sfcDetailResponse.ok) {
-                    MessageToast.show("Error fetching Parent SFC detail.");
-                    return;
+                    if (sfcDetailResponse.ok) {
+                        const sfcDetail = await sfcDetailResponse.json();
+                        const sfcStatusDesc = sfcDetail.status && sfcDetail.status.description;
+        
+                        if (String(sfcStatusDesc).toUpperCase() === "NEW") {
+                            // Invalidate Parent SFC
+                            const invalidateUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
+                            await new Promise((resolve) => {
+                                this.ajaxPatchRequest(
+                                    invalidateUrl,
+                                    {},
+                                    (response) => {
+                                        MessageToast.show("Parent SFC deleted.");
+                                        isParentSfcDeleted = true;
+                                        resolve();
+                                    },
+                                    (error) => {
+                                        // Still proceed to Complete Order even if invalidate fails
+                                        MessageToast.show("Failed to invalidate Parent SFC: " + (error && error.error && error.error.message ? error.error.message : ""));
+                                        resolve();
+                                    }
+                                );
+                            });
+                            // Wait for 2 seconds before running Complete Order
+                            await new Promise(res => setTimeout(res, 2000));
+                        }
+                    }
+                    // If SFC detail call failed or Parent SFC not in NEW, just move to Complete Order below
                 }
         
-                const sfcDetail = await sfcDetailResponse.json();
-                const sfcStatusDesc = sfcDetail.status && sfcDetail.status.description;
-
-                // 2. If Parent SFC status is NOT "NEW", show status and exit
-                if (String(sfcStatusDesc).toUpperCase() !== "NEW") {
-                    MessageToast.show("One or more SFC are in open status.");
-                    return;
-                }                
-        
-                // 3. Invalidate Parent SFC (status is "NEW")
-                const invalidateUrl = `${baseApiUrl}/sfc/v1/sfcs/invalidate?plant=${encodeURIComponent(plant)}&sfc=${encodeURIComponent(parentSFC)}`;
-                await new Promise((resolve) => {
-                    this.ajaxPatchRequest(
-                        invalidateUrl,
-                        {}, // No payload
-                        (response) => { resolve(); },
-                        (error) => {
-                            MessageToast.show("Failed to invalidate Parent SFC: " + (error.error?.message || error));
-                            resolve();
-                        }
-                    );
-                });
-        
-                // 4. Complete Order
+                // 2. Run Complete Order API regardless of anything above
                 const completeOrderUrl = `${baseApiUrl}/order/v1/orders/complete?order=${encodeURIComponent(selectedOrderNo)}&plant=${encodeURIComponent(plant)}`;
                 await new Promise((resolve) => {
                     this.ajaxPostRequest(
                         completeOrderUrl,
-                        {}, // No payload needed
+                        {},
                         (response) => {
-                            // Show the response message from the API
+                            // Show the response message from the API (success)
                             if (response && response.message) {
                                 MessageToast.show(response.message);
                             } else {
@@ -416,13 +405,22 @@ sap.ui.define([
                             resolve();
                         },
                         (error) => {
-                            // Show the response message from the API
-                            if (error && error.error && error.error.message) {
-                                MessageToast.show(error.error.message);
-                            } else {
-                                MessageToast.show("Failed to complete order.");
+                            // Always show API error message as in postman
+                            let apiMessage = null;
+                            if (error) {
+                                if (typeof error === "string") {
+                                    try {
+                                        const errObj = JSON.parse(error);
+                                        apiMessage = errObj.message || errObj.error?.message;
+                                    } catch {
+                                        apiMessage = error;
+                                    }
+                                } else if (typeof error === "object") {
+                                    apiMessage = error.message || error.error?.message;
+                                }
                             }
-                            this.onFilterPress(); // Optionally refresh table on error too
+                            MessageToast.show(apiMessage || "Failed to complete order.");
+                            this.onFilterPress();
                             resolve();
                         }
                     );
@@ -431,7 +429,8 @@ sap.ui.define([
             } catch (error) {
                 MessageToast.show("Unexpected error: " + error.message);
             }
-        },                        
+        },
+                                
 
 
 
