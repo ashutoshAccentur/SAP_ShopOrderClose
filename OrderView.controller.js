@@ -10,8 +10,12 @@ sap.ui.define([
 
     /**
      * ashutosh.d.kashyap
-     * Extract the UOM (Unit of Measure) for an order from the backend object.
-     * Tries in order: production UOM, ERP UOM, base UOM. Returns "" if not found.
+     * Extracts the Unit of Measure (UOM) for an order from the backend object.
+     * Checks for UOM in order of specificity:
+     *   - Returns production UOM if present in 'productionUnitOfMeasureObject.uom'.
+     *   - If not found, returns ERP UOM from 'erpUnitOfMeasure'.
+     *   - If still not found, returns base UOM from 'baseUnitOfMeasureObject.uom'.
+     * Returns an empty string if no UOM is found.
      * @param {object} orderApiObj - The raw order object from API.
      * @returns {string} - Unit of Measure or "".
      */
@@ -31,10 +35,12 @@ sap.ui.define([
 
     /**
      * ashutosh.d.kashyap
-     * Formats an ISO date string to "MM/DD/YYYY, hh:mm:ss am/pm" (Indian locale).
-     * Returns "-" if input is invalid.
+     * Formats an ISO date string into a human-readable format ("MM DD, YYYY, hh:mm:ss AM/PM").
+     * Attempts to parse the input string into a Date object.
+     * If the string is invalid or empty, returns "-".
+     * Uses 'en-US' locale to ensure AM/PM and readable formatting.
      * @param {string} dateStr - ISO date string.
-     * @returns {string}
+     * @returns {string} - Formatted date or "-".
      */
     function formatDate(dateStr) {
         if (!dateStr) return "-";
@@ -59,10 +65,11 @@ sap.ui.define([
 
     /**
      * ashutosh.d.kashyap
-     * Parse and validate a SAPUI5 DatePicker value to a Date object.
-     * Returns null if the value is empty or not a valid date.
+     * Safely parses and validates the value from a SAPUI5 DatePicker control into a Date object.
+     * Returns null if the control is missing, value is empty, or the date is invalid.
+     * Ensures robustness across browsers and user input scenarios.
      * @param {sap.m.DatePicker} oDatePicker - The DatePicker instance.
-     * @returns {Date|null}
+     * @returns {Date|null} - JavaScript Date object or null.
      */
     function parseDatePickerValue(oDatePicker) {
         if (!oDatePicker) return null;
@@ -75,8 +82,13 @@ sap.ui.define([
 
     /**
      * ashutosh.d.kashyap
-     * Maps a raw API order object to a UI table row object for model binding.
-     * Handles missing fields, formatting, and aggregates UI-friendly values.
+     * Maps the raw order API object to a formatted object suitable for UI table row binding.
+     * Extracts key properties (orderNo, material, status, quantities, etc.), 
+     * formats values with UOM, handles missing/null fields by using "-".
+     * Defaults 'parentSFC' and 'dmReleasedQty' to "-" (will be set asynchronously after API fetch).
+     * Calculates 'availableQty' as the difference between buildQuantity and releasedQuantity if present.
+     * Prepares display-friendly scheduled dates and priority, 
+     * and determines if row selection/radio should be enabled (based on execution status).
      * @param {object} orderApiObj - Raw order object from API.
      * @returns {object} - Row object for table/model.
      */
@@ -112,11 +124,13 @@ sap.ui.define([
     return PluginViewController.extend("bobm.custom.completeorderplugin.orderviewplugin.controller.OrderView", {
         metadata: { properties: {} },
 
-        /**
-         * ashutosh.d.kashyap
-         * Controller initialization. 
-         * Sets up the default JSON model for orders table and selection tracking.
-         */
+    /**
+     * ashutosh.d.kashyap
+     * Controller initialization method.
+     * Calls base class initializer (important for SAP plugin lifecycle).
+     * Sets up the default JSON model 'orderModel' for the view.
+     * Initializes the orders list and tracks currently selected order and its execution status.
+     */
         onInit: function () {
             // Call super (base class) init if present (important for plugin lifecycle)
             if (PluginViewController.prototype.onInit) {
@@ -130,14 +144,17 @@ sap.ui.define([
             }), "orderModel");
         },
 
-        /**
-         * ashutosh.d.kashyap
-         * Handler for "Filter" button press.
-         * Reads all input fields, validates mandatory fields,
-         * builds API request, fetches and processes results, and binds to table.
-         * Shows MessageToast for any input errors or backend failures.
-         * Updates the table model for display
-         */
+    /**
+     * ashutosh.d.kashyap
+     * Handler for the "Filter" button press in the orders table.
+     * - Reads all input filter fields (material, execution status, order number, date range).
+     * - Performs input validation (ensures at least one filter, date range logic, etc.).
+     * - Builds API query parameters and requests the orders list from the backend.
+     * - Optionally applies client-side filtering for date ranges (scheduledStartDate within user range).
+     * - Asynchronously enriches each order in the result with Parent SFC and DM Released Qty by calling the order detail and SFC detail APIs.
+     * - Updates the view model with the final list, resets selection, and updates the item count heading.
+     * - Handles API and client-side errors by showing reqd message.
+     */
         onFilterPress: function () {
             // Gather input controls by their IDs
             const oMaterial = this.byId("materialInput");
@@ -324,16 +341,17 @@ sap.ui.define([
 
         
 
-        /**
-         * ashutosh.d.kashyap
-         * Handles the Complete Order button click.
-         * Checks order selection and status
-         * Acts on two types of Order ("Active" & "Not-In-Execution")
-         * For Active one, throws message to Go and complete the open SFCs
-         * For NOT_IN_EXECUTION: fetches SFCs in (NEW, IN_QUEUE, or HOLD status)
-         * Invalidates these SFCs using PATCH, this will delete and Complete that Order.
-         * Shows MessageToast for any input errors or backend failures.
-         */
+    /**
+     * ashutosh.d.kashyap
+     * Handles the "Complete Order" button click action.
+     * - Retrieves the currently selected order from the model, and its Parent SFC if available.
+     * - If Parent SFC is present and its status is "NEW", invalidates it using the SFC Invalidate API, and displays a success/failure toast for SFC invalidation.
+     * - Waits for 2 seconds after invalidation, then proceeds.
+     * - Regardless of SFC presence or status, always calls the Complete Order API for the selected order.
+     * - Displays the exact response message returned by the Complete Order API (success or error) responses.
+     * - Refreshes the table after completion or error.
+     * - If there is an exception at any point, displays a general error toast.
+     */
         onCompleteOrder: async function () {
             const orderModel = this.getView().getModel("orderModel");
             const selectedOrderNo = orderModel.getProperty("/selectedOrderNo");
@@ -405,7 +423,7 @@ sap.ui.define([
                             resolve();
                         },
                         (error) => {
-                            // Always show API error message as in postman
+                            // Always show API response message
                             let apiMessage = null;
                             if (error) {
                                 if (typeof error === "string") {
@@ -434,11 +452,12 @@ sap.ui.define([
 
 
 
-        /**
-         * ashutosh.d.kashyap
-         * Handles radio button select event for table row.
-         * Updates the selected order number and execution status in the model.
-         */          
+    /**
+     * ashutosh.d.kashyap
+     * Handler for when a radio button is selected in the orders table.
+     * - Reads the selected row context.
+     * - Saves the selected order number and execution status into the view model for later use.
+     */          
         onRadioSelect: function(oEvent) {
             const oContext = oEvent.getSource().getBindingContext("orderModel");
             const orderNo = oContext.getProperty("orderNo");
@@ -468,10 +487,16 @@ sap.ui.define([
         // },
         
 
-        /**
-         * Wrapper utility for AJAX GET requests (legacy fallback in this app).
-         * Calls provided success/error callbacks.
-         */
+    /**
+     * Wrapper for legacy AJAX GET requests using success/error callbacks.
+     * Delegates to 'ajaxGetRequest'.
+     * On failure, displays a generic error message.
+     * Used for backward compatibility in parts of the app that use callback-style AJAX.
+     * @param {string} sUrl - API endpoint.
+     * @param {object} oParameters - Request parameters.
+     * @param {function} fnSuccessCallback - Success handler.
+     * @param {function} fnErrorCallback - Error handler.
+     */
         executeAjaxGetRequestSuccessCallback: function (sUrl, oParameters, fnSuccessCallback, fnErrorCallback) {
             this.ajaxGetRequest(
                 sUrl,
@@ -493,3 +518,4 @@ sap.ui.define([
         }
     });
 });
+
